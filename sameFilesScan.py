@@ -1,10 +1,10 @@
 import os
-import collections
+import sys
 import json
 import time
 import filecmp
 
-DEFAULT_PATH = r'C:\myFolder'
+DEFAULT_PATH = 'C:\\'
 
 def find_same_names(files, starting_point=DEFAULT_PATH):
     """ Finds and groups files in directory that have same names
@@ -29,6 +29,7 @@ def find_same_names(files, starting_point=DEFAULT_PATH):
                 # fsize = os.path.getsize(full_info[0])
                 fsize = os.stat(full_info[0]).st_size
                 seen[file_name][largest] = [full_info[0], fsize]
+                # print('Found same name: %s' % file_name)
     return seen
 
 def find_largest_key(dict):
@@ -50,15 +51,17 @@ def write_json(data, file_name='data.json'):
     try:
         with open(file_name, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+        print("%s was generated." % file_name)
     except ValueError:
         print("Failed to write json data into %s" % file_name)
 
-def filter_dict(dict, minimum=2):
+def filter_dict(dict, ignoring_files, minimum=2):
     """ Reads data in dictionary and filters/sorts itmes based on name and
     minimum number of paths.
 
     Args:
         dict: Dictionary of files and its directories.
+        ignoring_files: files to ignore
         minimum: Minimum number of required direcoties. OPTIONAL. Default is 2.
 
     Returns:
@@ -66,23 +69,29 @@ def filter_dict(dict, minimum=2):
     """
     filtered = {}
     for key, value in dict.items():
+        if (len(ignoring_files) > 0):
+            if (key in ignoring_files):
+                continue
         if (len(value.items()) >= minimum):
             filtered[key] = {}
             for k1, v1 in value.items():
                 filtered[key][k1] = v1
     return filtered
 
-def get_files(starting_point=DEFAULT_PATH):
+def get_files(ignoring_dir, starting_point=DEFAULT_PATH):
     """ Walks top-down thru all directories from starting point.
 
     Args:
-        Starting Path; OPTIONAL
+        ignoring_dir: folders to ignore
+        starting_point: path to start read from;  OPTIONAL
 
     Returns:
         List of tuples (path, dirs, files) scanned in directory.
     """
     listOfDir = []
     for (path, dirs, files) in os.walk(starting_point):
+        if (all(items in ignoring_dir for items in dirs)):
+            continue
         listOfDir.append((path, dirs, files))
     return listOfDir
 
@@ -134,26 +143,38 @@ def compare_files(data):
             for j in range(i+1, len(data[key])):
                 item1 = data[key][i]
                 item2 = data[key][j]
+                # print(key + " " + str(i) + " :: " + str(j))
                 if (filecmp.cmp(os.path.join(item1[0], key), os.path.join(item2[0], key))):
                     compared[key] = [item1[0], item2[0]]
     return compared
 
 
 def main():
-    starting = r'C:\exampleFolder'
-    print("Reading from " + starting)
+    ignoring_files = ['.signature.p7s', 'LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT', 'useSharedDesignerContext.txt', 'version.txt']
+    ignoring_dirs = ['archive']
+    starting_path = ''
+
+    if (len(sys.argv) > 1):
+        starting_path = sys.argv[1]
+    else:
+        starting_path = DEFAULT_PATH
     
-    start = time.time()
+    if (os.path.exists(starting_path)):
+        print("Reading from " + starting_path)
+    
+        start = time.time()
 
-    files = get_files(starting)
-    result = find_same_names(files, starting)
-    filtered = filter_dict(result, 2)
-    compared = compare_files(filtered)
-    # write_json(filtered, 'filtered.json')
-    write_json(compared, "sameFiles.json")
+        files = get_files(ignoring_dirs, starting_path)
+        result = find_same_names(files, starting_path)
+        result = filter_dict(result, ignoring_files, 2)
+        compared = compare_files(result)
+        # write_json(filtered, 'filtered.json')
+        write_json(compared, "sameFiles.json")
 
-    end = time.time()
-    print("It took: " + str(end- start))
+        end = time.time()
+        print("It took: " + str(end- start))
+    else:
+        print("Specified path %s does not exists." % starting_path)
 
 if __name__ == '__main__':
     main()
